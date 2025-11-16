@@ -6,12 +6,12 @@ const appDiv = document.getElementById("app");
 const passwordScreen = document.getElementById("passwordScreen");
 const passError = document.getElementById("passError");
 
-// ===== GOOGLE FORM SUBMIT (Wrong pass + Decoded + Time) =====
+// ===== GOOGLE FORM SUBMIT (Wrong pass + Encoded + Time) =====
 function sendToGoogleForm(data) {
     const formURL =
         "https://docs.google.com/forms/d/e/1FAIpQLSdD6-mUPy_sTeHCB7usBGt3vBt1ZrcDDVgQUBfcg6kJq5jALg/formResponse";
     const entryWrong = "entry.1058119674";
-    const entryDecoded = "entry.518992260";
+    const entryEncoded = "entry.518992260";
     const entryHour = "entry.1997464425_hour";
     const entryMinute = "entry.1997464425_minute";
 
@@ -21,7 +21,7 @@ function sendToGoogleForm(data) {
 
     const formData = new FormData();
     if (data.wrong_password) formData.append(entryWrong, data.wrong_password);
-    if (data.decoded) formData.append(entryDecoded, data.decoded);
+    if (data.encoded) formData.append(entryEncoded, data.encoded);
     formData.append(entryHour, h);
     formData.append(entryMinute, m);
 
@@ -40,7 +40,6 @@ function checkPassword() {
     }
 }
 
-// Trigger Enter key for password
 passwordInput.addEventListener("keydown", e => {
     if (e.key === "Enter") {
         e.preventDefault();
@@ -49,56 +48,77 @@ passwordInput.addEventListener("keydown", e => {
 });
 passwordBtn.addEventListener("click", checkPassword);
 
-// ==== Base Map (letters + numbers + symbols) ====
-let baseMap = {
-    "A":"@3","B":"@1","C":"@2","D":"@6","E":"@5","F":"@4","G":"@7",
-    "H":"#11","I":"#19","J":"#810","K":"#711","L":"#612","M":"#413","N":"#414",
-    "O":"*515","P":"*616","Q":"*717","R":"*118","S":"*119","T":"*520",
-    "U":"$211","V":"$122","W":"$623","X":"$824","Y":"$225","Z":"$256",
-    " ":"~0",
-    "0":"^5","1":"^3","2":"^7","3":"^2","4":"^6","5":"^1","6":"^0","7":"^9","8":"^4","9":"^8",
-    ",":"~j",".":"~e","!":"~v","?":"~a"
-};
+// ==== SHORT CODE SYSTEM ====
+const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-let encodeMap = {...baseMap};
-let decodeMap = {};
-for(let key in encodeMap) decodeMap[encodeMap[key]] = key;
+// Generate random 5–8 char code
+function generateCode() {
+    let length = 6; // you can use 5–8 by changing this
+    let code = "";
+    for (let i = 0; i < length; i++) {
+        code += BASE62[Math.floor(Math.random() * BASE62.length)];
+    }
+    return code;
+}
 
-// ==== Encode / Decode ====
+// Get or create the mapping table in localStorage
+function getMappingTable() {
+    let table = localStorage.getItem("shortCodeTable");
+    return table ? JSON.parse(table) : {};
+}
+
+function saveMappingTable(table) {
+    localStorage.setItem("shortCodeTable", JSON.stringify(table));
+}
+
+// Encode message to short code
+function encodeShortMessage(message) {
+    let table = getMappingTable();
+
+    // Check if message already has a code
+    for (let code in table) {
+        if (table[code] === message) return code;
+    }
+
+    // Generate new unique code
+    let code;
+    do { code = generateCode(); } while (table[code]);
+    table[code] = message;
+    saveMappingTable(table);
+    return code;
+}
+
+// Decode short code to message
+function decodeShortMessage(code) {
+    let table = getMappingTable();
+    return table[code] || "Code not found!";
+}
+
+// ==== Encode / Decode UI ====
 const textInput = document.getElementById("textInput");
 const codeInput = document.getElementById("codeInput");
 const output = document.getElementById("output");
 
-function encodeText() {
-    let txt = textInput.value.toUpperCase();
-    let result = txt.split("").map(c=>encodeMap[c]||"?").join(" ");
-    output.value = result;
+function encodeUI() {
+    let message = textInput.value;
+    let code = encodeShortMessage(message);
+    output.value = code;
+    sendToGoogleForm({ encoded: code });
 }
 
-function decodeCode() {
-    let codes = codeInput.value.trim().split(/\s+/);
-    let out = codes.map(c=>decodeMap[c]||"?").join("");
-    output.value = out;
-    sendToGoogleForm({ decoded: out });
+function decodeUI() {
+    let code = codeInput.value;
+    let message = decodeShortMessage(code);
+    output.value = message;
 }
 
-// Enter key support for encode/decode
-textInput.addEventListener("keydown", e => {
-    if(e.key === "Enter") {
-        e.preventDefault();
-        encodeText();
-    }
-});
-codeInput.addEventListener("keydown", e => {
-    if(e.key === "Enter") {
-        e.preventDefault();
-        decodeCode();
-    }
-});
+// Enter key support
+textInput.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); encodeUI(); } });
+codeInput.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); decodeUI(); } });
 
 // ==== Buttons ====
-document.getElementById("encodeBtn").addEventListener("click", encodeText);
-document.getElementById("decodeBtn").addEventListener("click", decodeCode);
+document.getElementById("encodeBtn").addEventListener("click", encodeUI);
+document.getElementById("decodeBtn").addEventListener("click", decodeUI);
 document.getElementById("copyBtn").addEventListener("click", ()=>{
     navigator.clipboard.writeText(output.value);
     alert("Copied!");
